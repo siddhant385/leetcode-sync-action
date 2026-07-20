@@ -1,0 +1,19 @@
+name: "LeetCode+ Sync"
+description: "Syncs your LeetCode submissions directly to GitHub"
+author: "LeetCode+"
+
+inputs:
+  github_token:
+    description: "GitHub Token for committing the code"
+    required: true
+    default: ${{ github.token }}
+  leetcode_session:
+    description: "LeetCode session cookie (LEETCODE_SESSION)"
+    required: true
+  leetcode_csrf_token:
+    description: "LeetCode CSRF token cookie (csrftoken)"
+    required: true
+
+runs:
+  using: "node20"
+  main: "dist/index.js"
