@@ -64,6 +64,12 @@ export const USER_STATUS_QUERY = `
     userStatus {
       isSignedIn
       username
+      submitStatsGlobal {
+        acSubmissionNum {
+          difficulty
+          count
+        }
+      }
     }
   }
 `;

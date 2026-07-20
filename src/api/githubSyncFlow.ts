@@ -126,9 +126,62 @@ export class GithubSyncFlow {
     }
     
     // 6. Update sync-stats.json
+    try {
+      await this.updateUserSubmissionStats();
+    } catch (e) {
+      console.warn("[Sync] Failed to update user submission stats", e);
+    }
 
     console.log(`[Sync] Successfully synced ${folderName}`);
     return true;
+  }
+
+  private async updateUserSubmissionStats(): Promise<void> {
+    const { githubToken, githubOwner: owner, githubRepo: repo } = this.config;
+    const statsPath = "sync-stats.json";
+    const userStatus = await leetcodeClient.getUserStatus();
+
+    if (!userStatus.isSignedIn) {
+      throw new Error("LeetCode user is not signed in.");
+    }
+
+    const existingStatsFile = await GitHubClient.getFileContent(githubToken, owner, repo, statsPath);
+    let existingStats: Record<string, unknown> = {};
+
+    if (existingStatsFile?.content) {
+      try {
+        existingStats = JSON.parse(existingStatsFile.content);
+      } catch (e) {
+        console.warn("[Sync] Could not parse existing sync-stats.json. Recreating it.", e);
+      }
+    }
+
+    const userSubmissionStats = userStatus.submitStatsGlobal.acSubmissionNum.reduce<Record<string, number>>(
+      (acc, stat) => {
+        acc[stat.difficulty.toLowerCase()] = stat.count;
+        return acc;
+      },
+      {}
+    );
+
+    const stats = {
+      ...existingStats,
+      leetcodeUsername: userStatus.username,
+      userSubmissionStats,
+      userSubmissionStatsUpdatedAt: new Date().toISOString(),
+    };
+
+    const statsBase64 = Buffer.from(JSON.stringify(stats, null, 2), "utf8").toString("base64");
+    console.log(`[Sync] Updating ${statsPath} with user submission stats...`);
+    await GitHubClient.uploadFile(
+      githubToken,
+      owner,
+      repo,
+      statsPath,
+      statsBase64,
+      "Update LeetCode submission stats",
+      existingStatsFile ? existingStatsFile.sha : null
+    );
   }
 
 }

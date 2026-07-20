@@ -70,6 +70,22 @@ export const LeetCodeProblemSchema = z.object({
   })
 });
 
+export const LeetCodeUserStatusSchema = z.object({
+  userStatus: z.object({
+    isSignedIn: z.boolean(),
+    username: z.string().nullable(),
+    submitStatsGlobal: z.object({
+      acSubmissionNum: z.array(
+        z.object({
+          difficulty: z.string(),
+          count: z.number(),
+        })
+      ),
+    }),
+  }),
+});
+
 // TypeScript type inference
 export type LeetCodeSubmission = z.infer<typeof LeetCodeSubmissionSchema>;
 export type LeetCodeProblem = z.infer<typeof LeetCodeProblemSchema>;
+export type LeetCodeUserStatus = z.infer<typeof LeetCodeUserStatusSchema>;

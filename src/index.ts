@@ -126,7 +126,19 @@ async function run() {
     // 7. Update and Commit State
     try {
       core.info('Updating sync-stats.json with new watermark...');
+      const statsFile = await GitHubClient.getFileContent(githubToken, owner, repo, statsPath);
+      let existingStats: Record<string, unknown> = {};
+
+      if (statsFile?.content) {
+        try {
+          existingStats = JSON.parse(statsFile.content);
+        } catch (e) {
+          core.info('Could not parse existing sync-stats.json while updating watermark. Recreating it.');
+        }
+      }
+
       const stats = {
+        ...existingStats,
         totalSynced,
         lastSyncedTimestamp: newestTimestamp,
         lastSyncDate: new Date().toISOString(),
@@ -134,7 +146,6 @@ async function run() {
       };
       
       const statsBase64 = Buffer.from(JSON.stringify(stats, null, 2), 'utf8').toString('base64');
-      const statsFile = await GitHubClient.getFileContent(githubToken, owner, repo, statsPath);
       
       await GitHubClient.uploadFile(
         githubToken,

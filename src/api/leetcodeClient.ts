@@ -1,9 +1,11 @@
-import { SUBMISSION_DETAILS_QUERY, PROBLEM_DETAIL_QUERY, SUBMISSION_LIST_QUERY, GLOBAL_SUBMISSION_LIST_QUERY } from "./queries";
+import { SUBMISSION_DETAILS_QUERY, PROBLEM_DETAIL_QUERY, SUBMISSION_LIST_QUERY, GLOBAL_SUBMISSION_LIST_QUERY, USER_STATUS_QUERY } from "./queries";
 import {
   LeetCodeSubmissionSchema,
   LeetCodeSubmission,
   LeetCodeProblemSchema,
   LeetCodeProblem,
+  LeetCodeUserStatusSchema,
+  LeetCodeUserStatus,
 } from "../schema/leetcodeClient.schema";
 
 export class LeetCodeClient {
@@ -71,7 +73,13 @@ export class LeetCodeClient {
     const validData = LeetCodeProblemSchema.parse(rawData);
     return validData.question;
   }
-  
+
+  public async getUserStatus(): Promise<LeetCodeUserStatus["userStatus"]> {
+    const rawData = await this.graphqlRequest<unknown>(USER_STATUS_QUERY);
+    const validData = LeetCodeUserStatusSchema.parse(rawData);
+    return validData.userStatus;
+  }
+
   public async getRecentSubmissions(questionSlug: string, limit: number = 20): Promise<any> {
     return this.graphqlRequest<unknown>(
       SUBMISSION_LIST_QUERY,

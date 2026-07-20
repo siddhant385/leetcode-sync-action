@@ -30080,8 +30080,45 @@ class GithubSyncFlow {
             console.warn("[Sync] Failed to update root README.md", e);
         }
         // 6. Update sync-stats.json
+        try {
+            await this.updateUserSubmissionStats();
+        }
+        catch (e) {
+            console.warn("[Sync] Failed to update user submission stats", e);
+        }
         console.log(`[Sync] Successfully synced ${folderName}`);
         return true;
+    }
+    async updateUserSubmissionStats() {
+        const { githubToken, githubOwner: owner, githubRepo: repo } = this.config;
+        const statsPath = "sync-stats.json";
+        const userStatus = await leetcodeClient_1.leetcodeClient.getUserStatus();
+        if (!userStatus.isSignedIn) {
+            throw new Error("LeetCode user is not signed in.");
+        }
+        const existingStatsFile = await githubClient_1.GitHubClient.getFileContent(githubToken, owner, repo, statsPath);
+        let existingStats = {};
+        if (existingStatsFile?.content) {
+            try {
+                existingStats = JSON.parse(existingStatsFile.content);
+            }
+            catch (e) {
+                console.warn("[Sync] Could not parse existing sync-stats.json. Recreating it.", e);
+            }
+        }
+        const userSubmissionStats = userStatus.submitStatsGlobal.acSubmissionNum.reduce((acc, stat) => {
+            acc[stat.difficulty.toLowerCase()] = stat.count;
+            return acc;
+        }, {});
+        const stats = {
+            ...existingStats,
+            leetcodeUsername: userStatus.username,
+            userSubmissionStats,
+            userSubmissionStatsUpdatedAt: new Date().toISOString(),
+        };
+        const statsBase64 = Buffer.from(JSON.stringify(stats, null, 2), "utf8").toString("base64");
+        console.log(`[Sync] Updating ${statsPath} with user submission stats...`);
+        await githubClient_1.GitHubClient.uploadFile(githubToken, owner, repo, statsPath, statsBase64, "Update LeetCode submission stats", existingStatsFile ? existingStatsFile.sha : null);
     }
 }
 exports.GithubSyncFlow = GithubSyncFlow;
@@ -30137,6 +30174,11 @@ class LeetCodeClient {
         const rawData = await this.graphqlRequest(queries_1.PROBLEM_DETAIL_QUERY, { titleSlug });
         const validData = leetcodeClient_schema_1.LeetCodeProblemSchema.parse(rawData);
         return validData.question;
+    }
+    async getUserStatus() {
+        const rawData = await this.graphqlRequest(queries_1.USER_STATUS_QUERY);
+        const validData = leetcodeClient_schema_1.LeetCodeUserStatusSchema.parse(rawData);
+        return validData.userStatus;
     }
     async getRecentSubmissions(questionSlug, limit = 20) {
         return this.graphqlRequest(queries_1.SUBMISSION_LIST_QUERY, { questionSlug, limit, offset: 0 });
@@ -30222,6 +30264,12 @@ exports.USER_STATUS_QUERY = `
     userStatus {
       isSignedIn
       username
+      submitStatsGlobal {
+        acSubmissionNum {
+          difficulty
+          count
+        }
+      }
     }
   }
 `;
@@ -30517,14 +30565,24 @@ async function run() {
         // 7. Update and Commit State
         try {
             core.info('Updating sync-stats.json with new watermark...');
+            const statsFile = await githubClient_1.GitHubClient.getFileContent(githubToken, owner, repo, statsPath);
+            let existingStats = {};
+            if (statsFile?.content) {
+                try {
+                    existingStats = JSON.parse(statsFile.content);
+                }
+                catch (e) {
+                    core.info('Could not parse existing sync-stats.json while updating watermark. Recreating it.');
+                }
+            }
             const stats = {
+                ...existingStats,
                 totalSynced,
                 lastSyncedTimestamp: newestTimestamp,
                 lastSyncDate: new Date().toISOString(),
                 latestProblem
             };
             const statsBase64 = Buffer.from(JSON.stringify(stats, null, 2), 'utf8').toString('base64');
-            const statsFile = await githubClient_1.GitHubClient.getFileContent(githubToken, owner, repo, statsPath);
             await githubClient_1.GitHubClient.uploadFile(githubToken, owner, repo, statsPath, statsBase64, `Update sync stats for ${latestProblem}`, statsFile ? statsFile.sha : null);
             core.info('Sync completed successfully.');
         }
@@ -30552,7 +30610,7 @@ run();
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.LeetCodeProblemSchema = exports.LeetCodeSubmissionSchema = void 0;
+exports.LeetCodeUserStatusSchema = exports.LeetCodeProblemSchema = exports.LeetCodeSubmissionSchema = void 0;
 const zod_1 = __nccwpck_require__(924);
 // Schema for raw data coming from LeetCode API
 exports.LeetCodeSubmissionSchema = zod_1.z.object({
@@ -30615,6 +30673,18 @@ exports.LeetCodeProblemSchema = zod_1.z.object({
         stats: zod_1.z.string().nullable().optional(),
         status: zod_1.z.string().nullable().optional(),
     })
+});
+exports.LeetCodeUserStatusSchema = zod_1.z.object({
+    userStatus: zod_1.z.object({
+        isSignedIn: zod_1.z.boolean(),
+        username: zod_1.z.string().nullable(),
+        submitStatsGlobal: zod_1.z.object({
+            acSubmissionNum: zod_1.z.array(zod_1.z.object({
+                difficulty: zod_1.z.string(),
+                count: zod_1.z.number(),
+            })),
+        }),
+    }),
 });
 
 
