@@ -65,12 +65,12 @@ const LEETCODE_SECTION_END = `<!---LeetCode Topics End-->`;
 export function appendProblemToReadme(
   topic: string,
   markdownFile: string,
-  hook: string,
+  repositoryPath: string,
   problem: string
 ): string {
   // Use "main" or "master" branch depending on user's repo, but hardcoding master/main might be needed here or passed dynamically. 
   // For now we keep the original logic but typed.
-  const url = `https://github.com/${hook}/tree/master/${problem}`;
+  const url = `https://github.com/${repositoryPath}/tree/main/${problem}`;
   const topicHeader = `## ${topic}`;
   const topicTableHeader = `\n${topicHeader}\n|  |\n| ------- |\n`;
   const newRow = `| [${problem}](${url}) |`;

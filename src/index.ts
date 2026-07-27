@@ -137,8 +137,17 @@ async function run() {
         }
       }
 
+      let userStats = {};
+      try {
+        core.info('Fetching global user stats from LeetCode...');
+        userStats = await syncFlow.getUserStats();
+      } catch (e) {
+        core.warning(`Could not fetch global user stats: ${e}`);
+      }
+
       const stats = {
         ...existingStats,
+        ...userStats,
         totalSynced,
         lastSyncedTimestamp: newestTimestamp,
         lastSyncDate: new Date().toISOString(),
