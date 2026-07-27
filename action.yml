@@ -13,6 +13,14 @@ inputs:
   leetcode_csrf_token:
     description: "LeetCode CSRF token cookie (csrftoken)"
     required: true
+  generate_badge:
+    description: "Whether to generate a badge for solved problems"
+    required: false
+    default: "false"
+  badge_folder:
+    description: "Folder to save the badge SVG"
+    required: false
+    default: ".badges"
 
 runs:
   using: "node24"

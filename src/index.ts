@@ -90,36 +90,35 @@ async function run() {
     }
 
     // 6. Process & Commit
-    if (pendingSync.length === 0) {
-      core.info('No new accepted submissions to sync. Exiting.');
-      return;
-    }
-
-    // Reverse to process oldest -> newest so commit history is accurate
-    pendingSync.reverse();
-
-    core.info(`Found ${pendingSync.length} new accepted submissions to sync.`);
-
     let latestProblem = "";
-    
-    for (let i = 0; i < pendingSync.length; i++) {
-      const submission = pendingSync[i];
-      const submissionId = parseInt(submission.id, 10);
-      core.info(`[${i + 1}/${pendingSync.length}] Syncing submission ID: ${submissionId} (${submission.title})`);
+
+    if (pendingSync.length === 0) {
+      core.info('No new accepted submissions to sync.');
+    } else {
+      // Reverse to process oldest -> newest so commit history is accurate
+      pendingSync.reverse();
+
+      core.info(`Found ${pendingSync.length} new accepted submissions to sync.`);
       
-      try {
-        const success = await syncFlow.syncSubmission(submissionId);
-        if (success) {
-          totalSynced++;
-          latestProblem = submission.title;
+      for (let i = 0; i < pendingSync.length; i++) {
+        const submission = pendingSync[i];
+        const submissionId = parseInt(submission.id, 10);
+        core.info(`[${i + 1}/${pendingSync.length}] Syncing submission ID: ${submissionId} (${submission.title})`);
+        
+        try {
+          const success = await syncFlow.syncSubmission(submissionId);
+          if (success) {
+            totalSynced++;
+            latestProblem = submission.title;
+          }
+          // Throttle 2 seconds between commits to avoid GitHub abuse rates
+          await delay(2000);
+        } catch (e) {
+          core.error(`Failed to sync submission ${submissionId}: ${e}`);
+          // Optionally, we could break here so the watermark doesn't update past this failure
+          core.setFailed('Stopping sync due to failure to prevent watermark corruption.');
+          return; 
         }
-        // Throttle 2 seconds between commits to avoid GitHub abuse rates
-        await delay(2000);
-      } catch (e) {
-        core.error(`Failed to sync submission ${submissionId}: ${e}`);
-        // Optionally, we could break here so the watermark doesn't update past this failure
-        core.setFailed('Stopping sync due to failure to prevent watermark corruption.');
-        return; 
       }
     }
 
@@ -137,12 +136,62 @@ async function run() {
         }
       }
 
-      let userStats = {};
+      let userStats: Record<string, any> = {};
       try {
         core.info('Fetching global user stats from LeetCode...');
         userStats = await syncFlow.getUserStats();
       } catch (e) {
         core.warning(`Could not fetch global user stats: ${e}`);
+      }
+
+      const generateBadge = core.getInput('generate_badge') === 'true';
+      if (generateBadge && userStats.userSubmissionStats) {
+        const badgeFolder = core.getInput('badge_folder') || '.badges';
+        const totalSolved = userStats.userSubmissionStats.all || 0;
+        
+        try {
+          core.info(`Generating badge for ${totalSolved} solved problems...`);
+          const badgeUrl = `https://img.shields.io/badge/LeetCode-${totalSolved}_Solved-orange?logo=leetcode`;
+          const res = await fetch(badgeUrl);
+          if (!res.ok) throw new Error(`Failed to fetch badge: ${res.statusText}`);
+          
+          const svgContent = await res.text();
+          const svgBase64 = Buffer.from(svgContent, 'utf8').toString('base64');
+          
+          const badgePath = `${badgeFolder.replace(/\/$/, '')}/leetcode.svg`;
+          const existingBadge = await GitHubClient.getFileContent(githubToken, owner, repo, badgePath).catch(() => null);
+          
+          if (existingBadge?.content) {
+            const existingBase64 = existingBadge.content.replace(/\n/g, '');
+            if (existingBase64 === svgBase64) {
+              core.info('Badge is already up to date. Skipping commit.');
+            } else {
+              await GitHubClient.uploadFile(
+                githubToken,
+                owner,
+                repo,
+                badgePath,
+                svgBase64,
+                `Update LeetCode badge to ${totalSolved} solved`,
+                existingBadge.sha
+              );
+              core.info(`Successfully updated badge at ${badgePath}`);
+            }
+          } else {
+            await GitHubClient.uploadFile(
+              githubToken,
+              owner,
+              repo,
+              badgePath,
+              svgBase64,
+              `Create LeetCode badge with ${totalSolved} solved`,
+              null
+            );
+            core.info(`Successfully created badge at ${badgePath}`);
+          }
+        } catch (badgeError) {
+          core.error(`Failed to generate/upload badge: ${badgeError}`);
+        }
       }
 
       const stats = {
@@ -151,22 +200,25 @@ async function run() {
         totalSynced,
         lastSyncedTimestamp: newestTimestamp,
         lastSyncDate: new Date().toISOString(),
-        latestProblem
+        latestProblem: latestProblem || (existingStats as any).latestProblem || ""
       };
       
       const statsBase64 = Buffer.from(JSON.stringify(stats, null, 2), 'utf8').toString('base64');
       
-      await GitHubClient.uploadFile(
-        githubToken,
-        owner,
-        repo,
-        statsPath,
-        statsBase64,
-        `Update sync stats for ${latestProblem}`,
-        statsFile ? statsFile.sha : null
-      );
-      
-      core.info('Sync completed successfully.');
+      if (statsFile?.content && statsFile.content.replace(/\n/g, '') === statsBase64) {
+        core.info('sync-stats.json is unchanged. Skipping commit.');
+      } else {
+        await GitHubClient.uploadFile(
+          githubToken,
+          owner,
+          repo,
+          statsPath,
+          statsBase64,
+          latestProblem ? `Update sync stats for ${latestProblem}` : `Update sync stats`,
+          statsFile ? statsFile.sha : null
+        );
+        core.info('Sync completed successfully.');
+      }
     } catch (e) {
       core.error(`Failed to update sync-stats.json: ${e}`);
     }

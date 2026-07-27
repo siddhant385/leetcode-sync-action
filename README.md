@@ -13,3 +13,23 @@ By moving this logic to a centralized GitHub Action, we ensure better reliabilit
 
 ## Usage
 This action is intended to be called from a `.github/workflows/leetcode-sync.yml` workflow file pushed by the LeetCode+ extension to the user's target repository. It uses the `LEETCODE_SESSION` and `LEETCODE_CSRF_TOKEN` secrets provided by the user.
+
+### Generating a Profile Badge
+
+You can now automatically generate a dynamically updating SVG badge that shows your total solved problems on LeetCode! Add the following to your action step:
+
+```yaml
+  - name: LeetCode+ Sync
+    uses: sid/leetcode-sync-action@main
+    with:
+      github_token: ${{ secrets.GITHUB_TOKEN }}
+      leetcode_session: ${{ secrets.LEETCODE_SESSION }}
+      leetcode_csrf_token: ${{ secrets.LEETCODE_CSRF_TOKEN }}
+      generate_badge: "true"
+      badge_folder: ".badges"
+```
+
+Once the action runs, an SVG will be saved to `.badges/leetcode.svg`. You can display it in your profile README:
+```markdown
+![LeetCode Stats](.badges/leetcode.svg)
+```
